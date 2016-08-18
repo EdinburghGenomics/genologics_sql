@@ -1,17 +1,17 @@
+from genologics_sql.version import __version__
 from setuptools import setup, find_packages
-import sys, os
 import subprocess
 import glob
 
 # Fetch version from git tags, and write to version.py.
 # Also, when git is not available (PyPi package), use stored version.py.
-version_py = os.path.join(os.path.dirname(__file__), 'version.py')
 
-try:
-    version_git = subprocess.Popen(["git", "describe", "--abbrev=0"],stdout=subprocess.PIPE).communicate()[0].rstrip()
-except:
-    with open(version_py, 'r') as fh:
-        version_git = open(version_py).read().strip().split('=')[-1].replace('"','')
+
+version = subprocess.Popen(["git", "describe", "--abbrev=0"],stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].rstrip()
+if not version:
+    version = __version__
+else:
+    version = version.decode("utf-8")
 
 try:
     with open("requirements.txt", "r") as f:
@@ -22,9 +22,8 @@ except IOError:
           "pyyaml",
           "psycopg2"]
 
-
 setup(name='genologics_sql',
-      version=version_git,
+      version=version,
       description="Python interface to the GenoLogics LIMS (Laboratory Information Management System) server via its postgres database.",
       long_description="""A basic module for interacting with the GenoLogics LIMS server via its postgres database.
                           The goal is to provide simple access to the most common entities and their attributes in a reasonably Pythonic fashion.""",

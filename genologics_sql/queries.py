@@ -206,6 +206,7 @@ def get_children_processes(session, parent_process, ptypes):
 
 
 def get_samples_and_processes(session, project_name=None, list_process=None, workstatus=None):
+    """This method runs a query that return the sample name and the processeses they went through"""
     q = session.query(Sample.name, ProcessType.displayname, Process.workstatus)\
            .distinct(Sample.name,Process.processid)\
            .join(Sample.project)\
