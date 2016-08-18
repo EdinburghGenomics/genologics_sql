@@ -116,7 +116,7 @@ class Project(Base):
                     udf_dict[udfrow.udfname]=(udfrow.udfvalue=="True")
                 else:
                     udf_dict[udfrow.udfname]=udfrow.udfvalue
-                
+
         return udf_dict
 
     def __repr__(self):
@@ -193,7 +193,7 @@ class Sample(Base):
                     udf_dict[udfrow.udfname]=(udfrow.udfvalue=="True")
                 else:
                     udf_dict[udfrow.udfname]=udfrow.udfvalue
-                
+
         return udf_dict
 
     def __repr__(self):
@@ -334,7 +334,7 @@ class Process(Base):
                     udf_dict[udfrow.udfname]=(udfrow.udfvalue=="True")
                 else:
                     udf_dict[udfrow.udfname]=udfrow.udfvalue
-                
+
         return udf_dict
 
 class Artifact(Base):
@@ -843,7 +843,7 @@ class Researcher(Base):
     email =             Column(String)
     fax =               Column(String)
     addressid =         Column(Integer)
-    labid =             Column(Integer, ForeignKey('lab.labid')) 
+    labid =             Column(Integer, ForeignKey('lab.labid'))
     supervisorid =      Column(Integer) 
     isapproved =        Column(Boolean) 
     requestedsupervisorfirstname =  Column(String) 
@@ -949,8 +949,9 @@ class ProcessIOTracker(Base):
 
     The following attributes are *not* found in the table, but are available through mapping
 
-    :arg Artifact artifact: artifact row corresponding to the ResultFile row.
-    
+    :arg Artifact artifact: artifact row corresponding to one input/output.
+    :arg Artifact Process: The process this tracker belongs to.
+
     """
     __tablename__ = 'processiotracker'
     trackerid =          Column(Integer, primary_key=True)
@@ -966,6 +967,9 @@ class ProcessIOTracker(Base):
     lastmodifiedby =     Column(Integer)
     inputartifactid =    Column(Integer, ForeignKey('artifact.artifactid'))
     processid =          Column(Integer, ForeignKey('process.processid'))
+
+    artifact = relationship(Artifact, backref='processiotrackers')
+    process = relationship(Process, backref='processiotrackers')
 
     def __repr__(self):
         return "<ProcessIOTracker(id={}, processid={}, inputartifactid={})>".format(self.trackerid, self.processid, self.inputartifactid)
@@ -1039,7 +1043,7 @@ class Principals(Base):
 
     :arg INTEGER principalid: internal principal id, primary key
     :arg STRING username: username associated with that row
-    :arg STRING password: hashed password 
+    :arg STRING password: hashed password
     :arg BOOLEAN isvisible: *unknown*
     :arg BOOLEAN isloggedin: flag checking is the user is currently within the system
     :arg INTEGER datastoreid: id of the associated datastore
@@ -1049,9 +1053,9 @@ class Principals(Base):
     :arg TIMESTAMP lastmodifieddate: row last modification date
     :arg INTEGER lastmodifiedby: researcherid of the last modifier
     :arg STRING ldapdn: *unknown*
-    :arg STRING ldapuuid: *unknown* 
-    :arg BOOLEAN accountlocked : *unknown* 
-    :arg INTEGER researcherid: id of the associated researcher row 
+    :arg STRING ldapuuid: *unknown*
+    :arg BOOLEAN accountlocked : *unknown*
+    :arg INTEGER researcherid: id of the associated researcher row
     :arg BOOLEAN locked: *unknown*
 
     """
@@ -1073,7 +1077,7 @@ class Principals(Base):
     researcherid =      Column(Integer, ForeignKey('researcher.researcherid'))
     locked =            Column(Boolean)
 
-    researcher=relationship("Researcher")
+    researcher = relationship("Researcher")
 
     def __repr__(self):
         return "<Principals(principalid={}, username={}, researcherid={})>".format(self.principalid, self.username, self.researcherid)
@@ -1092,7 +1096,7 @@ class Lab(Base):
     :arg INTEGER lastmodifiedby: researcherid of the last modifier
     :arg INTEGER billingadressid: ID of the associated billing address
     :arg INTEGER shippingaddressid: ID of the associated shipping address
-    
+
     """
 
     __tablename__ = "lab"
@@ -1124,7 +1128,7 @@ class Lab(Base):
                     udf_dict[udfrow.udfname]=(udfrow.udfvalue=="True")
                 else:
                     udf_dict[udfrow.udfname]=udfrow.udfvalue
-                
+
         return udf_dict
 
     def __repr__(self):
@@ -1156,10 +1160,49 @@ class ReagentType(Base):
     datastoreid =       Column(Integer)
     isglobal =          Column(Boolean)
     createddate =       Column(TIMESTAMP)
-    lastmodifieddate =  Column(TIMESTAMP) 
+    lastmodifieddate =  Column(TIMESTAMP)
     lastmodifiedby =    Column(Integer)
     isvisible =         Column(Boolean)
     reagentcategoryid = Column(Integer)
 
     def __repr__(self):
         return "<ReagentType(reagenttypeid={}, name={})>".format(self.reagenttypeid, self.name)
+
+
+class StageTransition(Base):
+    """Table
+
+    :arg INTEGER transitionid: the internal transition id
+    :arg INTEGER stageid: the internal state id
+    :arg INTEGER artifactid:  id of the associated artifact
+    :arg INTEGER workflowrunid: id of the workflow
+    :arg INTEGER generatedbyid:
+    :arg INTEGER ownerid: Researcher ID of the container creator
+    :arg INTEGER datastoreid: id of the associated datastore
+    :arg BOOLEAN isglobal: *unknown*
+    :arg TIMESTAMP createddate: The date of creation
+    :arg TIMESTAMP lastmodifieddate: The date of last modification
+    :arg INTEGER lastmodifiedby: researcherid of the last modifier
+    :arg INTEGER actionid: id of the Action associated
+    :arg INTEGER completedbyid: id of the Researcher that completed the tansition
+    :arg INTEGER actionstepid: id of the step
+
+    """
+    __tablename__ = 'stagetransition'
+    transitionid =      Column(Integer, primary_key=True)
+    stageid =           Column(Integer, ForeignKey('processiotracker.trackerid'))
+    artifactid =        Column(Integer, ForeignKey('artifact.artifactid'))
+    workflowrunid =     Column(Integer)
+    generatedbyid =     Column(Integer, ForeignKey('process.processid'))
+    ownerid =           Column(Integer)
+    datastoreid =       Column(Integer)
+    isglobal =          Column(Boolean)
+    createddate =       Column(TIMESTAMP)
+    lastmodifieddate =  Column(TIMESTAMP)
+    lastmodifiedby =    Column(Integer)
+    actionid =          Column(Integer)
+    completedbyid =     Column(Integer, ForeignKey('stage.stageid'))
+    actionstepid =      Column(Integer)
+
+    def __repr__(self):
+        return "<StageTransition(transitionid={}, stageid={}, artifactid={})>".format(self.transitionid, self.stageid, self.artifactid)
