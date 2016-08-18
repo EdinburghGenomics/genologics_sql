@@ -207,7 +207,7 @@ def get_children_processes(session, parent_process, ptypes):
 
 def get_samples_and_processes(session, project_name=None, list_process=None, workstatus=None):
     """This method runs a query that return the sample name and the processeses they went through"""
-    q = session.query(Sample.name, ProcessType.displayname, Process.workstatus)\
+    q = session.query(Project.name, Sample.name, ProcessType.displayname, Process.workstatus)\
            .distinct(Sample.name,Process.processid)\
            .join(Sample.project)\
            .join(Sample.artifacts)\
@@ -251,18 +251,16 @@ def get_samples_udf_containers(session, project_name=None):
     return q.all()
 
 
-
 def all_samples_and_processes(session, project_name=None):
     from collections import defaultdict, Counter
     processes = defaultdict(dict)
     for result in get_samples_and_processes(session, project_name, workstatus='COMPLETE'):
-        sample_name, process_name, process_status = result
-        if not 'sample' in processes[process_name]:
+        project_name, sample_name, process_name, process_status = result
+        if not 'samples' in processes[process_name]:
             processes[process_name]['samples'] = set()
         processes[process_name]['samples'].add(sample_name)
         if not 'status' in processes[process_name]:
             processes[process_name]['status'] = Counter()
         processes[process_name]['status'][process_status]+=1
-    for p in  processes:
+    for p in processes:
         print(p, len(processes[p]['samples']), ', '.join(['%s-%s'%(k, v) for k, v in processes[p]['status'].items()]))
-
