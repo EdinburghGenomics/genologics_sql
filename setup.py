@@ -11,7 +11,7 @@ version = subprocess.Popen(["git", "describe", "--abbrev=0"],stdout=subprocess.P
 if not version:
     version = __version__
 else:
-    version = version.decode("utf-8")
+    version = version
 
 try:
     with open("requirements.txt", "r") as f:
