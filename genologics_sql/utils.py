@@ -15,7 +15,7 @@ def get_configuration():
                 return yaml.load(f)
     raise Exception("Cannot find a valid configuration file. Please read the README.md.")
 
-def get_engine():
+def get_engine(echo=False):
     """generates a SQLAlchemy engine for PostGres with the CONF currently used
     :returns: the SQLAlchemy engine"""
     uri=None
@@ -23,13 +23,13 @@ def get_engine():
         uri="postgresql://{user}:{passw}@{url}/{db}".format(user=CONF['username'], passw=CONF.get('password', ''), url=CONF['url'], db=CONF['db'])
     except KeyError as e:
         raise Exception("The configuration file seems to be missing a required parameter. Please read the README.md. Missing key : {}".format(e.message))
-    return create_engine(uri)
+    return create_engine(uri, echo=echo)
 
-def get_session():
+def get_session(echo=False):
     """Generates a SQLAlchemy session based on the CONF
     :returns: the SQLAlchemy session
     """
-    engine=get_engine()
+    engine=get_engine(echo=echo)
     Base.metadata.bind = engine
     DBSession = sessionmaker(bind=engine)
     session = DBSession()

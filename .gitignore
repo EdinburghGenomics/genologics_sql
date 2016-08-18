@@ -1,6 +1,6 @@
 *.pyc
 *.swp
-build/*
+doc/build/*
 dist/*
 genologics_sql.egg-info/*
 install-files.txt

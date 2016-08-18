@@ -203,3 +203,127 @@ def get_children_processes(session, parent_process, ptypes):
             where pro2.processid={parent} and pro.typeid in ({typelist});".format(parent=parent_process, typelist=",".join([str(x) for x in ptypes]))
 
     return session.query(Process).from_statement(text(query)).all()
+
+
+def get_samples_and_processes(session, project_name=None, list_process=None, workstatus=None):
+    q = session.query(Sample.name, ProcessType.displayname, Process.workstatus)\
+           .distinct(Sample.name,Process.processid)\
+           .join(Sample.project)\
+           .join(Sample.artifacts)\
+           .join(Artifact.processiotrackers)\
+           .join(ProcessIOTracker.process)\
+           .join(Process.type)
+    if list_process:
+        q = q.filter(ProcessType.displayname.in_(list_process))
+    if project_name:
+        q = q.filter(Project.name == project_name)
+    if workstatus:
+        q = q.filter(Process.workstatus == workstatus)
+    return q.all()
+
+
+def get_samples_container(session, project_name=None):
+    '''Link sample to project and original container'''
+    q = session.query(Project.name, Container.name, Sample.name)\
+               .distinct(Project.name, Container.name, Sample.name)\
+               .join(Sample.project)\
+               .join(Sample.artifacts)\
+               .join(Artifact.containerplacement)\
+               .join(ContainerPlacement.container)
+    if project_name:
+        q = q.filter(Project.name == project_name)
+    return q.all()
+
+
+def get_samples_udf_containers(session, project_name=None):
+    '''Link sample to project original container, and non null UDFs'''
+    q = session.query(Project.name, Container.name, Sample.name, SampleUdfView.udfname,SampleUdfView.udfvalue)\
+           .distinct(Sample.name, SampleUdfView.udfname)\
+           .join(Sample.project)\
+           .join(Sample.udfs)\
+           .join(Sample.artifacts)\
+           .join(Artifact.containerplacement)\
+           .join(ContainerPlacement.container)\
+           .filter(SampleUdfView.udfvalue!=None)
+    if project_name:
+        q = q.filter(Project.name == project_name)
+    return q.all()
+
+
+
+def all_samples_and_processes(session, project_name=None):
+    from collections import defaultdict, Counter
+    processes = defaultdict(dict)
+    for result in get_samples_and_processes(session, project_name, workstatus='COMPLETE'):
+        sample_name, process_name, process_status = result
+        if not 'sample' in processes[process_name]:
+            processes[process_name]['samples'] = set()
+        processes[process_name]['samples'].add(sample_name)
+        if not 'status' in processes[process_name]:
+            processes[process_name]['status'] = Counter()
+        processes[process_name]['status'][process_status]+=1
+    for p in  processes:
+        print(p, len(processes[p]['samples']), ', '.join(['%s-%s'%(k, v) for k, v in processes[p]['status'].items()]))
+
+
+['AUTOMATED - Add ATL',
+'Eval qPCR Quant',
+'Notify User EG 1',
+'AUTOMATED - Add LIG',
+'Receive Sample (Freezer management)',
+'Data Release EG 1',
+'Prepare Reaction Plate for Genotyping 1',
+'Prepare Reaction Mix (Cocktail Mix)',
+'AUTOMATED - Size Select IMP',
+'Amp PCR',
+'AUTOMATED - Cluster Flowcel',
+'AUTOMATED - Clean Up PCR',
+'AUTOMATED - Sequenc',
+'Incubate IMP',
+'SEMI-AUTOMATED - Make LQC & Caliper GX QC',
+'AUTOMATED - Make NTP',
+'AUTOMATED - Make Normalized CFP',
+'Visual QC''Receive Sample EG 4.0''SEMI-AUTOMATED - Make and Read qPCR Quant',
+'QC Review EG 1',
+'Prepare Sample Dilution',
+'Aliquot samples (Freezer Management',
+'Find Derived Sample Plates EG 1.0''Genotyping Data Received EG 2',
+'Remove Sample EG 1.',
+'Create CFP Batch',
+'Create PDP Poo',
+'Fragment DNA (Covaris)',
+'Bartender label generation EG 2.0',
+'Genotyping Plate Preparation EG 2',
+'SEMI-AUTOMATED - Make DNA Quant & Eval Standard Quant',
+'DNA Extracti',
+'AUTOMATED - Make PCR',
+'Upload Gel Images EG 1.0',
+'Sequencing Plate Preparation EG 2',
+'NanoDrop QC (DNA) 5',
+'QuantStudio 12K Flex Run 1',
+'AUTOMATED - Make CS',
+'AUTOMATED - Clean Up ALP',
+'Create Pooling CST Batc',
+'Sample Placement EG 1.0',
+'Sample Recei',
+'Incubate 1 ALP',
+'AUTOMATED - Make DCT',
+'Awaiting User Response EG 1',
+'AUTOMATED - Make DTP',
+'Create Production CST Batc',
+'AUTOMATED - Make Pooled CS',
+'Eval Project Quant',
+'Fragment Analyser (DNA) EG 1',
+'Sort Samples',
+'EG TEST USE ONLY - Clean Up P',
+'AUTOMATED - Make PD',
+'Read and Eval SSQC',
+'Spectramax Picogreen EG 5',
+'OpenArray Sample Tracker and AccuFill System 1.0',
+'Bartender label generation EG 3.0',
+'AUTOMATED - Make IMP',
+'Receive Sample 2.0',
+'Incubate 2 ALP',
+'Sample Stora',
+'Receive Sample 3.0',
+'ourier Number for New Plate Dispatch']
