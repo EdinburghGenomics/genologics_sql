@@ -1,6 +1,7 @@
 from genologics_sql.tables import *
 
 from sqlalchemy import text
+from sqlalchemy.sql import func
 
 def get_last_modified_projects(session, interval="2 hours"):
     """gets the project objects last modified in the last <interval>
@@ -264,3 +265,194 @@ def all_samples_and_processes(session, project_name=None):
         processes[process_name]['status'][process_status]+=1
     for p in processes:
         print(p, len(processes[p]['samples']), ', '.join(['%s-%s'%(k, v) for k, v in processes[p]['status'].items()]))
+
+
+def stage_transitions_action_ids(session, sample_name):
+    '''See documentation: https://genologics.zendesk.com/hc/en-us/articles/213979583-Stage-transitions-and-Action-IDs'''
+    q = session.query(Project.name, Sample.name, Artifact.artifactid, StageTransition.actionid,
+                      ProcessType.displayname, StageTransition.workflowrunid) \
+        .join(Sample.project) \
+        .join(Sample.artifacts) \
+        .join(Artifact.stage_transitions) \
+        .join(StageTransition.stage) \
+        .join(Stage.workflowsection) \
+        .join(WorkflowSection.labworkflow) \
+        .join(WorkflowSection.labprotocol) \
+        .join(LabProtocol.protocolsteps) \
+        .join(ProtocolStep.processtype)
+    q = q.filter(Sample.name == sample_name)
+    return q.all()
+
+def stage_times_o(session, project_name=None, sample_name=None):
+    q = session.query(
+        Project.name,
+        Sample.name,
+        LabProtocol.protocolname,
+        func.max(StageTransition.lastmodifieddate) - func.min(StageTransition.lastmodifieddate)
+    )
+    q = q.join(Sample.project) \
+        .join(Sample.artifacts) \
+        .join(Artifact.stage_transitions) \
+        .join(StageTransition.stage) \
+        .join(Stage.workflowsection) \
+        .join(WorkflowSection.labprotocol)
+    q = q.group_by(Project.name, Sample.name, LabProtocol.protocolname)
+    q = q.order_by(Project.name, Sample.name, LabProtocol.protocolname)
+    if project_name:
+        q = q.filter(Project.name == project_name)
+    if sample_name:
+        q = q.filter(Sample.name == sample_name)
+
+    return  q.all()
+
+def stage_times(session, project_name=None, sample_name=None):
+    q = session.query(
+        Project.name,
+        Sample.name,
+        LabProtocol.protocolname,
+        StageTransition.lastmodifieddate,
+        StageTransition.generatedbyid,
+        StageTransition.completedbyid
+    )
+    q = q.join(Sample.project) \
+        .join(Sample.artifacts) \
+        .join(Artifact.stage_transitions) \
+        .join(StageTransition.stage) \
+        .join(Stage.workflowsection) \
+        .join(WorkflowSection.labprotocol)
+    #q = q.group_by(Project.name, Sample.name, LabProtocol.protocolname)
+    #q = q.order_by(Project.name, Sample.name, LabProtocol.protocolname)
+    if project_name:
+        q = q.filter(Project.name == project_name)
+    if sample_name:
+        q = q.filter(Sample.name == sample_name)
+
+    return  q.all()
+
+def format_tdelta(tdelta, fmt):
+    d = {"days": tdelta.days}
+    d["hours"], rem = divmod(tdelta.seconds, 3600)
+    d["minutes"], d["seconds"] = divmod(rem, 60)
+    return fmt.format(**d)
+
+
+def non_QC_queues(session, project_name=None, sample_name=None, workflow_name=None, protocol_name=None, step_name=None):
+    """
+    This query gives all of the samples sitting in queue of a non aledgedly non-qc steps
+    """
+    q = session.query(
+        Project.name, Sample.name, LabWorkflow.workflowname, LabProtocol.protocolname, LabProtocol.qcprotocol,
+        ProcessType.displayname, WorkflowSection.sectionindex,
+        ProtocolStep.protocolstepindex, StageTransition.workflowrunid, StageTransition.completedbyid
+    )
+    q = q.distinct(
+        Project.name, Sample.name, LabWorkflow.workflowname, LabProtocol.protocolname, LabProtocol.qcprotocol,
+        ProcessType.displayname
+    )
+    q = q.join(Sample.project) \
+        .join(Sample.artifacts) \
+        .join(Artifact.stage_transitions) \
+        .join(StageTransition.stage) \
+        .join(Stage.protocolstep) \
+        .join(ProtocolStep.processtype) \
+        .join(Stage.workflowsection) \
+        .join(WorkflowSection.labprotocol) \
+        .join(WorkflowSection.labworkflow)
+    q = q.order_by(Project.name, Sample.name, LabProtocol.protocolname)
+    if project_name:
+        q = q.filter(Project.name == project_name)
+    if sample_name:
+        q = q.filter(Sample.name == sample_name)
+    if workflow_name:
+        q = q.filter(LabWorkflow.workflowname == workflow_name)
+    if protocol_name:
+        q = q.filter(LabProtocol.protocolname == protocol_name)
+    if step_name:
+        q = q.filter(ProcessType.displayname == step_name)
+
+    # StageTransition.workflowrunid is positive when the transition in not complete and negative when the transition is completed
+    q = q.filter(StageTransition.workflowrunid > 0)
+    q = q.filter(StageTransition.completedbyid.is_(None))
+    return q.all()
+
+
+def test_show_queue(session, protocol_name, process_type):
+    query1 = """
+select queue.project, queue.sample, queue.createddate, queue.workflowrunid from
+(
+    Select
+    CASE
+    WHEN lp.qcprotocol = 't' then prqc.name
+    ELSE pr.name
+    END as project,
+
+    CASE
+    WHEN lp.qcprotocol = 't' then stqc.createddate
+    ELSE st.createddate
+    END as createddate,
+
+    CASE
+    WHEN lp.qcprotocol = 't' then aqc.name
+    ELSE a.name
+    END as sample,
+
+    CASE
+    WHEN lp.qcprotocol = 't' then stqc.workflowrunid
+    ELSE st.workflowrunid
+    END as workflowrunid
+
+    from labprotocol lp
+    INNER JOIN protocolstep ps ON ps.protocolid = lp.protocolid
+    INNER JOIN processtype pt ON pt.typeid = ps.processtypeid
+    INNER JOIN workflowsection ws ON ps.protocolid = ws.protocolid
+    FULL OUTER JOIN stage sqc ON sqc.membershipid = ws.sectionid
+    INNER JOIN stagetransition stqc ON stqc.stageid = sqc.stageid
+    INNER JOIN artifact aqc ON aqc.artifactid = stqc.artifactid
+    INNER JOIN artifact_sample_map asmqc ON asmqc.artifactid = aqc.artifactid
+    INNER JOIN sample saqc ON saqc.processid = asmqc.processid
+    INNER JOIN project prqc ON prqc.projectid = saqc.projectid
+
+    FULL OUTER JOIN stage s ON s.stepid = ps.stepid
+    FULL OUTER JOIN stagetransition st ON st.stageid = s.stageid
+    FULL OUTER JOIN artifact a ON a.artifactid = st.artifactid
+    FULL OUTER JOIN artifact_sample_map asm ON asm.artifactid = a.artifactid
+    FULL OUTER JOIN sample sa ON sa.processid = asm.processid
+    FULL OUTER JOIN project pr ON pr.projectid = sa.projectid
+
+    WHERE lp.protocolname LIKE '{protocol_name}'
+    AND pt.displayname LIKE '{process_type}'
+    AND stqc.completedbyid IS NULL
+    AND st.completedbyid IS NULL
+) queue
+where queue.workflowrunid > 0
+
+"""
+    query2 = """
+    Select pr.name as project, a.name sample, st.createddate as createddate, st.workflowrunid as workflowrunid
+    from labprotocol lp
+    INNER JOIN protocolstep ps ON ps.protocolid = lp.protocolid
+    INNER JOIN processtype pt ON pt.typeid = ps.processtypeid
+    INNER JOIN stage s ON s.stepid = ps.stepid
+    INNER JOIN stagetransition st ON st.stageid = s.stageid
+    INNER JOIN artifact a ON a.artifactid = st.artifactid
+    INNER JOIN artifact_sample_map asm ON asm.artifactid = a.artifactid
+    INNER JOIN sample sa ON sa.processid = asm.processid
+    INNER JOIN project pr ON pr.projectid = sa.projectid
+
+    WHERE lp.protocolname LIKE '{protocol_name}'
+    AND pt.displayname LIKE '{process_type}'
+    AND st.completedbyid IS NULL
+    AND st.workflowrunid > 0
+
+    """
+    query = query2.format(protocol_name=protocol_name, process_type=process_type)
+    return session.query('project', 'sample', 'createddate', 'workflowrunid').from_statement(text(query)).all()
+
+
+if __name__ == '__main__':
+    import genologics_sql
+    from collections import defaultdict
+    session = genologics_sql.utils.get_session(echo=True)
+    res = non_QC_workflows(session)
+    print('\n'.join([str(r) for r in res]))
+    print(len(res))

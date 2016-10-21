@@ -315,10 +315,13 @@ class Process(Base):
     signedbyid =        Column(Integer)
     signeddate =        Column(TIMESTAMP)
     nextstepslocked =   Column(Boolean)
+    protocolstepid =    Column(Integer, ForeignKey('protocolstep.stepid'))
+
 
     type = relationship("ProcessType", backref='processes')
     udfs = relationship("ProcessUdfView")
     technician = relationship("Principals")
+    protocolstep = relationship('ProtocolStep', backref='processes')
 
     def __repr__(self):
         return "<Process(id={}, type={})>".format(self.processid, self.typeid)
@@ -1190,7 +1193,7 @@ class StageTransition(Base):
     """
     __tablename__ = 'stagetransition'
     transitionid =      Column(Integer, primary_key=True)
-    stageid =           Column(Integer, ForeignKey('processiotracker.trackerid'))
+    stageid =           Column(Integer, ForeignKey('stage.stageid'))
     artifactid =        Column(Integer, ForeignKey('artifact.artifactid'))
     workflowrunid =     Column(Integer)
     generatedbyid =     Column(Integer, ForeignKey('process.processid'))
@@ -1201,8 +1204,121 @@ class StageTransition(Base):
     lastmodifieddate =  Column(TIMESTAMP)
     lastmodifiedby =    Column(Integer)
     actionid =          Column(Integer)
-    completedbyid =     Column(Integer, ForeignKey('stage.stageid'))
+    completedbyid =     Column(Integer, ForeignKey('process.processid'))
     actionstepid =      Column(Integer)
+
+    artifact = relationship('Artifact', backref='stage_transitions')
+    process_completed = relationship('Process', primaryjoin='StageTransition.completedbyid == Process.processid')
+    process_generated = relationship('Process', primaryjoin='StageTransition.generatedbyid == Process.processid')
+    stage = relationship('Stage', backref='stage_transitions')
 
     def __repr__(self):
         return "<StageTransition(transitionid={}, stageid={}, artifactid={})>".format(self.transitionid, self.stageid, self.artifactid)
+    
+    
+
+class Stage(Base):
+    __tablename__ = 'stage'
+
+    stageid = Column(Integer, primary_key=True)
+    membershipid = Column(Integer, ForeignKey('workflowsection.sectionid'))
+    stepid = Column(Integer, ForeignKey('protocolstep.stepid'))
+    stageindex = Column(Integer, nullable=False)
+
+    workflowsection = relationship('WorkflowSection', backref='stages')
+    protocolstep = relationship('ProtocolStep', backref='stages')
+
+
+class ProtocolStep(Base):
+    __tablename__ = 'protocolstep'
+
+    stepid = Column(Integer, primary_key=True)
+    processtypeid = Column(Integer, ForeignKey('processtype.typeid'))
+    protocolstepindex = Column(Integer)
+    stepconfiguration = Column(String)
+    ownerid = Column(Integer)
+    datastoreid = Column(Integer)
+    isglobal = Column(Boolean)
+    createddate = Column(TIMESTAMP)
+    lastmodifieddate = Column(TIMESTAMP)
+    lastmodifiedby = Column(Integer)
+    protocolid = Column(Integer, ForeignKey('labprotocol.protocolid'))
+    filter = Column(String)
+    qcprotocolstep = Column(Boolean)
+    qcwithplacement = Column(Boolean)
+    qcmeasurementwithfile = Column(Boolean)
+    defaultprocesstemplate = Column(Integer, ForeignKey('protocol.protocolid'))
+    esignaturerequired = Column(Boolean)
+    epplocknextsteps = Column(Boolean)
+
+    protocol = relationship('Protocol', backref='protocolsteps')
+    processtype = relationship('ProcessType', backref='protocolsteps')
+    labprotocol = relationship('LabProtocol', backref='protocolsteps')
+
+
+
+class LabProtocol(Base):
+    __tablename__ = 'labprotocol'
+
+    protocolid = Column(Integer, primary_key=True)
+    protocolname = Column(String, unique=True)
+    protocolindex = Column(Integer)
+    ishidden = Column(Boolean)
+    ownerid = Column(Integer)
+    datastoreid = Column(Integer)
+    isglobal = Column(Boolean)
+    createddate = Column(TIMESTAMP)
+    lastmodifieddate = Column(TIMESTAMP)
+    lastmodifiedby = Column(Integer)
+    qcprotocol = Column(Boolean)
+    displayablemodifieddate = Column(TIMESTAMP)
+    displayablemodifiedby = Column(Integer)
+    protocoltype = Column(String)
+    capacity = Column(Integer)
+
+
+
+class Protocol(Base):
+    __tablename__ = 'protocol'
+
+    protocolid = Column(Integer, primary_key=True)
+    name = Column(String)
+    description = Column(String)
+    sequencenumber = Column(Integer)
+    ownerid = Column(Integer)
+    datastoreid = Column(Integer)
+    isglobal = Column(Boolean)
+    createddate = Column(TIMESTAMP)
+    lastmodifieddate = Column(TIMESTAMP)
+    lastmodifiedby = Column(Integer)
+    processtypeid = Column(Integer, ForeignKey('processtype.typeid', deferrable=True, initially='DEFERRED'), index=True)
+    processclassid = Column(Integer)
+    processid = Column(Integer)
+
+    processtype = relationship('ProcessType',  backref='protocols')
+
+
+class WorkflowSection(Base):
+    __tablename__ = 'workflowsection'
+
+    sectionid = Column(Integer, primary_key=True)
+    workflowid = Column(Integer, ForeignKey('labworkflow.workflowid'))
+    protocolid = Column(Integer, ForeignKey('labprotocol.protocolid'))
+    sectionindex = Column(Integer)
+    labprotocol = relationship('LabProtocol', backref='workflow_sections')
+    labworkflow = relationship('LabWorkflow', backref='workflow_sections')
+
+
+
+class LabWorkflow(Base):
+    __tablename__ = 'labworkflow'
+
+    workflowid = Column(Integer, primary_key=True)
+    workflowname = Column(String, nullable=False, unique=True)
+    createddate = Column(TIMESTAMP, nullable=False)
+    lastmodifieddate = Column(TIMESTAMP, nullable=False)
+    workflowstatus = Column(String, nullable=False)
+    ownerid = Column(Integer)
+    datastoreid = Column(Integer)
+    isglobal = Column(Boolean)
+    lastmodifiedby = Column(Integer)
