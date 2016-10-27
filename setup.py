@@ -1,10 +1,10 @@
-from genologics_sql.version import __version__
+from genologics_sql import __version__
 from setuptools import setup, find_packages
 import subprocess
 import glob
 
-# Fetch version from git tags, and write to version.py.
-# Also, when git is not available (PyPi package), use stored version.py.
+# Fetch version from git tags
+# When git is not available (PyPi package), use stored version.
 
 
 version = subprocess.Popen(["git", "describe", "--abbrev=0"],stdout=subprocess.PIPE, universal_newlines=True).communicate()[0].rstrip()
